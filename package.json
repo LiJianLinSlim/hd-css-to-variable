@@ -1,0 +1,53 @@
+{
+    "name": "hd-css-to-variable",
+    "version": "1.0.8",
+    "description": "一个用于扫描CSS/SCSS文件并将指定属性值提取为全局CSS变量的工具",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "bin": {
+        "css-to-variable": "dist/cli.js"
+    },
+    "publishConfig": {
+        "access": "public",
+        "registry": "https://registry.npmjs.org/"
+    },
+    "files": [
+        "dist",
+        "README.md"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/yourusername/css-to-variable.git"
+    },
+    "scripts": {
+        "build": "tsc",
+        "test": "jest",
+        "lint": "eslint src --ext .ts"
+    },
+    "keywords": [
+        "css",
+        "scss",
+        "variables",
+        "css-variables",
+        "css-to-variable"
+    ],
+    "author": "linlijian <linlijian2@yy.com>",
+    "license": "MIT",
+    "devDependencies": {
+        "@types/jest": "^29.5.14",
+        "@types/node": "^20.17.24",
+        "@typescript-eslint/eslint-plugin": "^6.15.0",
+        "@typescript-eslint/parser": "^6.15.0",
+        "eslint": "^8.56.0",
+        "jest": "^29.7.0",
+        "ts-jest": "^29.2.6",
+        "typescript": "^5.8.2"
+    },
+    "dependencies": {
+        "@types/glob": "^8.1.0",
+        "commander": "^13.1.0",
+        "glob": "^10.4.5",
+        "postcss": "^8.5.3",
+        "postcss-scss": "^4.0.9"
+    }
+}
