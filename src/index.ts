@@ -197,27 +197,45 @@ export class CssToVariable {
     // 去重变量定义
     const uniqueVariables = new Map<string, string>();
     for (const variable of this.extractedVariables) {
-      // 如果是字符串类型的值，确保保留引号
-      const value = variable.value.startsWith('"') || variable.value.startsWith('\'') 
-        ? variable.value 
-        : variable.value;
-      uniqueVariables.set(variable.variableName, value);
+      uniqueVariables.set(variable.variableName, variable.value);
     }
 
-    const variableDefinitions = Array.from(uniqueVariables.entries())
-      .map(([name, value]) => `  ${name}: ${value};`)
-      .join('\n');
+    // 如果没有提取到任何变量，则输出提示信息并返回
+    if (uniqueVariables.size === 0) {
+      console.log('⚠️ 警告：未提取到任何CSS变量，跳过文件生成。');
+      return;
+    }
 
-    const content = `:root {\n${variableDefinitions}\n}\n`;
-    await fs.promises.writeFile(path.join(this.options.directory, this.options.outputFile), content);
+    // 生成CSS变量定义内容
+    const variablesContent = ':root {\n' +
+      Array.from(uniqueVariables.entries())
+        .map(([name, value]) => `  ${name}: ${value};`)
+        .join('\n') +
+      '\n}\n';
+
+    // 处理文件名冲突
+    let outputFilePath = path.join(this.options.directory, this.options.outputFile);
+    let counter = 1;
+    const ext = path.extname(outputFilePath);
+    const base = outputFilePath.slice(0, -ext.length);
+
+    while (fs.existsSync(outputFilePath)) {
+      outputFilePath = `${base}-${counter}${ext}`;
+      counter++;
+    }
+
+    // 写入文件
+    await fs.promises.writeFile(outputFilePath, variablesContent);
+
+    // 如果文件名与原始文件名不同，输出提示信息
+    if (outputFilePath !== path.join(this.options.directory, this.options.outputFile)) {
+      console.log(`ℹ️ 提示：由于文件名冲突，变量文件已保存为：${path.basename(outputFilePath)}`);
+    }
 
     // 如果需要导出变量映射关系
     if (this.options.exportMap) {
       const mapContent = JSON.stringify(Object.fromEntries(this.variableMap), null, 2);
-      const mapFilePath = path.join(
-        this.options.directory,
-        this.options.outputFile.replace(/\.css$/, '.map.json')
-      );
+      const mapFilePath = outputFilePath.replace(/.css$/, '.map.json');
       await fs.promises.writeFile(mapFilePath, mapContent);
     }
   }
