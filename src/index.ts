@@ -174,6 +174,14 @@ export class CssToVariable {
     let variablesCount = 0;  // 添加变量计数
     root.walkDecls((decl) => {
       if (this.options.properties.includes(decl.prop) && !decl.value.startsWith('var(') && !decl.value.startsWith('--')) {
+        // 检查属性值是否为相对路径，如果是则跳过处理
+        if (decl.value.startsWith('./') || decl.value.startsWith('../') || decl.value.match(/^[^/].*\.(png|jpg|jpeg|gif|svg|webp)$/i)) {
+          return;
+        }
+        // 如果属性值为transparent，跳过处理
+        if (decl.value.toLowerCase() === 'transparent') {
+          return;
+        }
         const variableName = this.options.nameFormatter(decl.prop, decl.value, decl);
         const variable = {
           property: decl.prop,
@@ -185,7 +193,7 @@ export class CssToVariable {
         this.extractedVariables.push(variable);
         this.updateVariableUsage(variable);
         decl.value = `var(${variableName})`;
-        variablesCount++;  // 增加变量计数
+        variablesCount++; // 增加变量计数
       }
     });
 

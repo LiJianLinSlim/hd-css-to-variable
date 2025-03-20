@@ -1,6 +1,6 @@
 {
     "name": "hd-css-to-variable",
-    "version": "1.1.1",
+    "version": "1.1.2",
     "description": "一个用于扫描CSS/SCSS文件并将指定属性值提取为全局CSS变量的工具",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
@@ -17,7 +17,7 @@
     ],
     "repository": {
         "type": "git",
-        "url": "https://github.com/yourusername/css-to-variable.git"
+        "url": "https://github.com/LiJianLinSlim/css-to-variable.git"
     },
     "scripts": {
         "build": "tsc",
