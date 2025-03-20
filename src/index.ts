@@ -174,8 +174,13 @@ export class CssToVariable {
     let variablesCount = 0;  // 添加变量计数
     root.walkDecls((decl) => {
       if (this.options.properties.includes(decl.prop) && !decl.value.startsWith('var(') && !decl.value.startsWith('--')) {
-        // 检查属性值是否为相对路径，如果是则跳过处理
-        if (decl.value.startsWith('./') || decl.value.startsWith('../') || decl.value.match(/^[^/].*\.(png|jpg|jpeg|gif|svg|webp)$/i)) {
+        // 检查属性值是否包含SCSS变量（$符号）
+        if (decl.value.includes('$')) {
+          return;
+        }
+        // 检查属性值是否为相对路径或url()函数，如果是则跳过处理
+        if (decl.value.startsWith('./') || decl.value.startsWith('../') || decl.value.match(/^[^/].*\.(png|jpg|jpeg|gif|svg|webp)$/i) || 
+            (decl.value.startsWith('url(') && (decl.value.includes('./') || decl.value.includes('../')))) {
           return;
         }
         // 如果属性值为transparent，跳过处理
@@ -214,24 +219,47 @@ export class CssToVariable {
    * 生成变量定义文件
    */
   private async generateVariablesFile(): Promise<void> {
-    // 去重变量定义
-    const uniqueVariables = new Map<string, string>();
+    // 按文件夹分组变量
+    const variablesByFolder = new Map<string, ExtractedVariable[]>();
     for (const variable of this.extractedVariables) {
-      uniqueVariables.set(variable.variableName, variable.value);
+      const filePath = variable.filePath;
+      const relativePath = path.relative(this.options.directory, filePath);
+      const folderPath = path.dirname(relativePath);
+      
+      if (!variablesByFolder.has(folderPath)) {
+        variablesByFolder.set(folderPath, []);
+      }
+      variablesByFolder.get(folderPath)!.push(variable);
     }
 
     // 如果没有提取到任何变量，则输出提示信息并返回
-    if (uniqueVariables.size === 0) {
+    if (this.extractedVariables.length === 0) {
       console.log('⚠️ 警告：未提取到任何CSS变量，跳过文件生成。');
       return;
     }
 
     // 生成CSS变量定义内容
-    const variablesContent = ':root {\n' +
-      Array.from(uniqueVariables.entries())
+    let variablesContent = ':root {\n';
+
+    // 按文件夹生成分组注释和变量
+    for (const [folder, variables] of variablesByFolder) {
+      // 添加文件夹注释
+      variablesContent += `\n  /* ${folder === '.' ? '根目录' : folder} */\n`;
+
+      // 去重并生成变量定义
+      const uniqueVariables = new Map<string, string>();
+      for (const variable of variables) {
+        uniqueVariables.set(variable.variableName, variable.value);
+      }
+
+      // 添加变量定义
+      variablesContent += Array.from(uniqueVariables.entries())
         .map(([name, value]) => `  ${name}: ${value};`)
-        .join('\n') +
-      '\n}\n';
+        .join('\n') + '\n';
+    }
+
+    variablesContent += '}\n';
+
 
     // 处理文件名冲突
     let outputFilePath = path.join(this.options.directory, this.options.outputFile);
