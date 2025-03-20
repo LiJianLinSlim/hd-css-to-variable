@@ -139,6 +139,7 @@ export class CssToVariable {
    * 解析单个文件
    */
   private async parseFile(filePath: string): Promise<void> {
+    console.log(`📝 正在处理文件: ${path.relative(this.options.directory, filePath)}`);  // 添加文件处理提示
     const content = await fs.promises.readFile(filePath, 'utf-8');
     const result = await postcss().process(content, {
       from: filePath,
@@ -166,6 +167,7 @@ export class CssToVariable {
       });
     }
 
+    let variablesCount = 0;  // 添加变量计数
     root.walkDecls((decl) => {
       if (this.options.properties.includes(decl.prop) && !decl.value.startsWith('var(') && !decl.value.startsWith('--')) {
         const variableName = this.generateVariableName(decl.prop, decl.value);
@@ -179,8 +181,13 @@ export class CssToVariable {
         this.extractedVariables.push(variable);
         this.updateVariableUsage(variable);
         decl.value = `var(${variableName})`;
+        variablesCount++;  // 增加变量计数
       }
     });
+
+    if (variablesCount > 0) {
+      console.log(`✨ 从文件中提取了 ${variablesCount} 个变量`);  // 显示提取的变量数量
+    }
 
     const processedResult = await processor.process(root, {
       from: filePath,
@@ -188,6 +195,7 @@ export class CssToVariable {
     });
 
     await fs.promises.writeFile(filePath, processedResult.css);
+    console.log(`✅ 文件更新完成: ${path.relative(this.options.directory, filePath)}`);  // 添加文件更新完成提示
   }
 
   /**
@@ -249,24 +257,18 @@ export class CssToVariable {
       absolute: true
     });
 
-    console.log(`\n🔍 正在扫描目录: ${this.options.directory}`);
-    console.log(`📁 找到 ${files.length} 个匹配的文件\n`);
+    console.log(`🔍 找到 ${files.length} 个文件需要处理`);  // 添加文件总数提示
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const progress = Math.round(((i + 1) / files.length) * 100);
-      console.log(`⏳ [${progress}%] 正在处理: ${path.relative(this.options.directory, file)}`);
+    let processedFiles = 0;  // 添加已处理文件计数
+    for (const file of files) {
       await this.parseFile(file);
+      processedFiles++;  // 增加已处理文件计数
+      const progress = Math.round((processedFiles / files.length) * 100);  // 计算进度百分比
+      console.log(`📊 总进度: ${progress}%`);  // 显示总进度
     }
 
-    console.log('\n📝 正在生成变量定义文件...');
     await this.generateVariablesFile();
-
-    const uniqueVariables = new Set(this.extractedVariables.map(v => v.variableName));
-    console.log(`\n✨ 处理完成！`);
-    console.log(`📊 统计信息:`);
-    console.log(`   - 处理文件数: ${files.length} 个`);
-    console.log(`   - 提取变量数: ${uniqueVariables.size} 个\n`);
+    console.log(`🎉 所有文件处理完成！共处理 ${files.length} 个文件，提取 ${this.extractedVariables.length} 个变量`);  // 添加完成统计
   }
 
   /**
