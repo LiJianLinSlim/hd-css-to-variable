@@ -16,7 +16,7 @@ interface CssToVariableOptions {
   /** 文件匹配模式 */
   pattern?: string;
   /** 自定义变量命名规则 */
-  nameFormatter?: (property: string, value: string) => string;
+  nameFormatter?: (property: string, value: string, decl?: postcss.Declaration) => string;
   /** 是否导出变量映射关系 */
   exportMap?: boolean;
 }
@@ -63,45 +63,49 @@ export class CssToVariable {
   /**
    * 默认变量命名规则
    */
-  private defaultNameFormatter(property: string, value: string): string {
-    // 处理字符串类型的值
-    if (value.startsWith('"') || value.startsWith('\'')) {
-      // 保留字符串值，但移除引号并替换特殊字符
-      const cleanValue = value.slice(1, -1).replace(/[^a-zA-Z0-9]/g, '-');
-      return `--${this.options.prefix}-${property}-string-${cleanValue}`;
-    }
+  private defaultNameFormatter(property: string, value: string, decl?: postcss.Declaration): string {
+    // 获取文件夹名和类名
+    let folderName = '';
+    let className = '';
 
-    // 处理SCSS变量
-    if (value.startsWith('$')) {
-      // 在变量映射中查找实际值
-      const scssVarName = value.replace(/^\$/, '');
-      const scssVarValue = this.extractedVariables.find(v => v.variableName === `--${this.options.prefix}-${property}-${scssVarName}`)?.value;
-      if (scssVarValue) {
-        const cleanValue = scssVarValue.replace(/^#/, '').replace(/[^a-zA-Z0-9]/g, '');
-        return `--${this.options.prefix}-${property}-${cleanValue}`;
+    if (decl) {
+      // 获取文件夹名
+      const filePath = decl.source?.input.file || '';
+      if (filePath) {
+        const relativePath = path.relative(this.options.directory, filePath);
+        const pathParts = relativePath.split(path.sep);
+        if (pathParts.length > 1) {
+          folderName = pathParts[pathParts.length - 2];
+        }
       }
-      return `--${this.options.prefix}-${property}-${scssVarName}`;
-    }
 
-    // 处理渐变色
-    if (value.includes('gradient')) {
-      // 提取渐变类型和颜色值
-      const gradientMatch = value.match(/(linear|radial|conic)-gradient\s*\((.*?)\)/);
-      if (gradientMatch) {
-        const [, type, content] = gradientMatch;
-        // 提取所有颜色值（包括十六进制、RGB、RGBA等）
-        const colors = content.match(/(#[0-9a-f]{3,8}|rgba?\([^)]+\)|hsla?\([^)]+\))/gi) || [];
-        // 将所有颜色值组合成一个唯一标识符
-        const colorsHash = colors
-          .map(color => color.replace(/[^a-zA-Z0-9]/g, ''))
-          .join('')
-          .slice(0, 32); // 限制长度
-        return `--${this.options.prefix}-${property}-${type}-${colorsHash}`;
+      // 获取类名
+      let parent = decl.parent as postcss.Rule | undefined;
+      while (parent) {
+        if (parent.type === 'rule') {
+          const selectorMatch = parent.selector.match(/\.(([\w-]+))/);
+          if (selectorMatch) {
+            className = selectorMatch[1];
+            break;
+          }
+        }
+        parent = parent.parent as postcss.Rule | undefined;
       }
     }
 
-    const cleanValue = value.replace(/^#/, '').replace(/[^a-zA-Z0-9]/g, '');
-    return `--${this.options.prefix}-${property}-${cleanValue}`;
+    // 生成基础变量名
+    const baseVariableName = `--${this.options.prefix}${folderName ? `-${folderName}` : ''}${className ? `-${className}` : ''}-${property}`;
+
+    // 检查变量名是否已存在，如果存在则添加序号
+    let finalVariableName = baseVariableName;
+    let counter = 1;
+
+    while (this.extractedVariables.some(v => v.variableName === finalVariableName)) {
+      finalVariableName = `${baseVariableName}-${counter}`;
+      counter++;
+    }
+
+    return finalVariableName;
   }
 
   /**
@@ -170,7 +174,7 @@ export class CssToVariable {
     let variablesCount = 0;  // 添加变量计数
     root.walkDecls((decl) => {
       if (this.options.properties.includes(decl.prop) && !decl.value.startsWith('var(') && !decl.value.startsWith('--')) {
-        const variableName = this.generateVariableName(decl.prop, decl.value);
+        const variableName = this.options.nameFormatter(decl.prop, decl.value, decl);
         const variable = {
           property: decl.prop,
           value: decl.value,

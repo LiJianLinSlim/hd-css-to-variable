@@ -1,6 +1,6 @@
 {
     "name": "hd-css-to-variable",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "description": "一个用于扫描CSS/SCSS文件并将指定属性值提取为全局CSS变量的工具",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
