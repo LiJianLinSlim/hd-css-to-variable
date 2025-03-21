@@ -3,6 +3,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import postcss from 'postcss';
 import scss from 'postcss-scss';
+import imageToBase64 from 'image-to-base64';
+import NameMap from './constant';
 
 interface CssToVariableOptions {
   /** 要扫描的目录路径 */
@@ -19,6 +21,7 @@ interface CssToVariableOptions {
   nameFormatter?: (property: string, value: string, decl?: postcss.Declaration) => string;
   /** 是否导出变量映射关系 */
   exportMap?: boolean;
+  assetsOutput?: boolean;  // 添加新的配置选项
 }
 
 interface ExtractedVariable {
@@ -46,17 +49,19 @@ interface VariableReport {
 export class CssToVariable {
   private options: Required<CssToVariableOptions>;
   private extractedVariables: ExtractedVariable[] = [];
+  private extractedAssets: ExtractedVariable[] = [];  // 新增：存储资源变量
   private variableMap: Map<string, VariableReport> = new Map();
 
   constructor(options: CssToVariableOptions) {
     this.options = {
       directory: options.directory,
       properties: options.properties,
-      prefix: options.prefix || 'var',
+      prefix: options.prefix || '',
       outputFile: options.outputFile || 'variables.css',
       pattern: options.pattern || '**/*.{css,scss}',
       nameFormatter: options.nameFormatter || this.defaultNameFormatter.bind(this),
-      exportMap: options.exportMap || false
+      exportMap: options.exportMap || false,
+      assetsOutput: options.assetsOutput || false  // 设置默认值
     };
   }
 
@@ -92,9 +97,10 @@ export class CssToVariable {
         parent = parent.parent as postcss.Rule | undefined;
       }
     }
-
+    const rewriteProperty = NameMap[property as keyof typeof NameMap] || property;
+   
     // 生成基础变量名
-    const baseVariableName = `--${this.options.prefix}${folderName ? `-${folderName}` : ''}${className ? `-${className}` : ''}-${property}`;
+    const baseVariableName = `--${this.options.prefix ? this.options.prefix + '-' : ''}${folderName ? `${folderName + '-'}` : ''}${className ? `${className + '-'}` : ''}${rewriteProperty}`;
 
     // 检查变量名是否已存在，如果存在则添加序号
     let finalVariableName = baseVariableName;
@@ -171,18 +177,53 @@ export class CssToVariable {
       });
     }
 
-    let variablesCount = 0;  // 添加变量计数
+    let variablesCount = 0;
+    const declarations: postcss.Declaration[] = [];
     root.walkDecls((decl) => {
+      declarations.push(decl);
+    });
+
+    for (const decl of declarations) {
       if (this.options.properties.includes(decl.prop) && !decl.value.startsWith('var(') && !decl.value.startsWith('--')) {
         // 检查属性值是否包含SCSS变量（$符号）
         if (decl.value.includes('$')) {
-          return;
+          continue;  // 改用 continue 而不是 return，确保继续处理其他声明
         }
-        // 检查属性值是否为相对路径或url()函数，如果是则跳过处理
-        if (decl.value.startsWith('./') || decl.value.startsWith('../') || decl.value.match(/^[^/].*\.(png|jpg|jpeg|gif|svg|webp)$/i) || 
-            (decl.value.startsWith('url(') && (decl.value.includes('./') || decl.value.includes('../')))) {
-          return;
+
+        // 处理所有图片路径，包括相对路径和url()函数
+        const isImageUrl = decl.value.match(/url\(['"]?([^'")\s]+\.(?:png|jpg|jpeg|gif|svg|webp))['"]?\)/i);
+        
+        if (isImageUrl) {
+          try {
+            const imgPath = path.resolve(
+              path.dirname(decl.source?.input.file || ''),
+              isImageUrl[1]
+            );
+            
+            if (fs.existsSync(imgPath)) {
+              const base64String = await imageToBase64(imgPath);
+              const imageType = path.extname(imgPath).slice(1);
+              const base64Value = `url(data:image/${imageType};base64,${base64String})`;
+              
+              const variableName = this.options.nameFormatter(decl.prop, base64Value, decl);
+              const variable = {
+                property: decl.prop,
+                value: base64Value,
+                variableName,
+                filePath,
+                line: decl.source?.start?.line || 0
+              };
+              
+              this.extractedAssets.push(variable);
+              this.updateVariableUsage(variable);
+              variablesCount++;
+            }
+          } catch (error) {
+            console.warn(`⚠️ 警告：处理图片 ${decl.value} 时出错：`, error);
+          }
+          continue;  // 改用 continue 而不是 return，确保继续处理其他声明
         }
+
         // 如果属性值为transparent，跳过处理
         if (decl.value.toLowerCase() === 'transparent') {
           return;
@@ -200,7 +241,7 @@ export class CssToVariable {
         decl.value = `var(${variableName})`;
         variablesCount++; // 增加变量计数
       }
-    });
+    };
 
     if (variablesCount > 0) {
       console.log(`✨ 从文件中提取了 ${variablesCount} 个变量`);  // 显示提取的变量数量
@@ -289,6 +330,34 @@ export class CssToVariable {
   }
 
   /**
+   * 生成资源变量文件
+   */
+  private async generateAssetsFile(): Promise<void> {
+    // 如果不需要输出资源文件或没有提取到资源，直接返回
+    if (!this.options.assetsOutput || this.extractedAssets.length === 0) {
+      return;
+    }
+
+    let assetsContent = ':root {\n';
+    assetsContent += `\n  /* 资源变量 */\n`;
+
+    const uniqueAssets = new Map<string, string>();
+    for (const asset of this.extractedAssets) {
+      uniqueAssets.set(asset.variableName, asset.value);
+    }
+
+    assetsContent += Array.from(uniqueAssets.entries())
+      .map(([name, value]) => `  ${name}: ${value};`)
+      .join('\n') + '\n';
+
+    assetsContent += '}\n';
+
+    const assetsFilePath = path.join(this.options.directory, 'assets.css');
+    await fs.promises.writeFile(assetsFilePath, assetsContent);
+    console.log(`✨ 生成资源变量文件: assets.css`);
+  }
+
+  /**
    * 执行变量提取
    */
   public async extract(): Promise<void> {
@@ -308,7 +377,11 @@ export class CssToVariable {
     }
 
     await this.generateVariablesFile();
-    console.log(`🎉 所有文件处理完成！共处理 ${files.length} 个文件，提取 ${this.extractedVariables.length} 个变量`);  // 添加完成统计
+    if (this.options.assetsOutput) {
+      await this.generateAssetsFile();
+    }
+    
+    console.log(`🎉 所有文件处理完成！共处理 ${files.length} 个文件，提取 ${this.extractedVariables.length} 个变量${this.options.assetsOutput ? `，${this.extractedAssets.length} 个资源变量` : ''}`);
   }
 
   /**

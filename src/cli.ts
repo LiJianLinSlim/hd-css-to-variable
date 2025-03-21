@@ -8,7 +8,27 @@ import * as fs from 'fs';
 program
   .name('hd-css-to-variable')
   .description('将CSS/SCSS文件中的指定属性值提取为全局CSS变量')
-  .version('1.0.5');
+  .version('1.0.5')
+  .addHelpText('after', `
+示例:
+  $ hd-css-to-variable build -d ./src
+  $ hd-css-to-variable extract -d ./src -p color,background-color
+  $ hd-css-to-variable extract -d ./src -p color,background-image --prefix theme --assets-output true
+
+命令:
+  build                使用预设参数执行变量提取
+  extract              使用自定义参数执行变量提取
+
+选项:
+  -d, --directory      要扫描的目录路径
+  -p, --properties     要提取的CSS属性列表，用逗号分隔
+  --prefix             变量名前缀 (默认: "var")
+  --output            输出的变量文件名 (默认: "variables.css")
+  --pattern           文件匹配模式 (默认: "**/*.{css,scss}")
+  --assets-output     是否输出图片资源的base64变量 (默认: false)
+  -h, --help          显示帮助信息
+  -v, --version       显示版本号
+`);
 
 program
   .command('build')
@@ -25,8 +45,8 @@ program
 
     const cssToVariable = new CssToVariable({
       directory,
-      properties: ['color', 'background-color'],
-      prefix: 'theme'
+      properties: ['color', 'background-color','background-image', 'background'],
+      prefix: ''
     });
 
     cssToVariable.extract()
@@ -47,6 +67,7 @@ program
   .option('--prefix <string>', '变量名前缀', 'var')
   .option('--output <filename>', '输出的变量文件名', 'variables.css')
   .option('--pattern <pattern>', '文件匹配模式', '**/*.{css,scss}')
+  .option('--assets-output <boolean>', '是否输出图片资源的base64变量', false)  // 添加新参数
   .action((options) => {
     const directory = path.resolve(options.directory);
     
@@ -61,7 +82,8 @@ program
       properties: options.properties.split(','),
       prefix: options.prefix,
       outputFile: options.output,
-      pattern: options.pattern
+      pattern: options.pattern,
+      assetsOutput: options.assetsOutput === 'true'  // 将字符串转换为布尔值传递给参数
     });
 
     cssToVariable.extract()
