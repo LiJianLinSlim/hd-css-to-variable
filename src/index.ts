@@ -21,7 +21,10 @@ interface CssToVariableOptions {
   nameFormatter?: (property: string, value: string, decl?: postcss.Declaration) => string;
   /** 是否导出变量映射关系 */
   exportMap?: boolean;
-  assetsOutput?: boolean;  // 添加新的配置选项
+  /** 是否导出图片资源base64 */
+  assetsOutput?: boolean; 
+  /** 是否按文件夹拆分变量文件 */
+  splitByFolder?: boolean;  
 }
 
 interface ExtractedVariable {
@@ -61,7 +64,8 @@ export class CssToVariable {
       pattern: options.pattern || '**/*.{css,scss}',
       nameFormatter: options.nameFormatter || this.defaultNameFormatter.bind(this),
       exportMap: options.exportMap || false,
-      assetsOutput: options.assetsOutput || false  // 设置默认值
+      assetsOutput: options.assetsOutput || false,
+      splitByFolder: options.splitByFolder || false  // 添加 splitByFolder 的初始化
     };
   }
 

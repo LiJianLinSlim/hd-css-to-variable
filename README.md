@@ -1,4 +1,4 @@
-# hd-css-to-variable
+# css-to-variable
 
 一个用于扫描CSS/SCSS文件并将指定属性值提取为全局CSS变量的工具。
 
@@ -14,6 +14,9 @@
 - 支持导出变量映射关系
 - 提供命令行工具
 - 提供变量使用情况报告
+- 支持按文件夹分组生成变量文件
+- 支持图片资源转base64并提取为变量
+- 智能跳过特殊属性值（如transparent、相对路径图片等）
 
 ## 安装
 
@@ -43,7 +46,7 @@ hd-css-to-variable extract -d ./src -p color,background-color --prefix theme
 ### 代码调用
 
 ```typescript
-import { CssToVariable } from 'hd-css-to-variable';
+import { CssToVariable } from 'css-to-variable';
 
 const cssToVariable = new CssToVariable({
   // 要扫描的目录路径
@@ -156,6 +159,8 @@ await cssToVariable.extract();
 | --prefix | 变量名前缀 | var |
 | --output | 输出的变量文件名 | variables.css |
 | --pattern | 文件匹配模式 | **/*.{css,scss} |
+| --assets-output | 是否输出图片资源的base64变量 | false |
+| --split-by-folder | 是否按文件夹拆分变量文件 | false |
 
 ## 注意事项
 
@@ -166,6 +171,9 @@ await cssToVariable.extract();
 5. 支持处理rgba和hsla等带透明度的颜色值
 6. 可以通过nameFormatter自定义变量命名规则
 7. 可以通过getVariableReport获取变量使用情况报告
+8. 智能跳过transparent等特殊属性值，避免不必要的变量提取
+9. 支持将图片资源转换为base64并提取为变量
+10. 可以按文件夹分组生成变量文件，便于管理
 
 ## 许可证
 

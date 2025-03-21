@@ -67,7 +67,8 @@ program
   .option('--prefix <string>', '变量名前缀', 'var')
   .option('--output <filename>', '输出的变量文件名', 'variables.css')
   .option('--pattern <pattern>', '文件匹配模式', '**/*.{css,scss}')
-  .option('--assets-output <boolean>', '是否输出图片资源的base64变量', false)  // 添加新参数
+  .option('--assets-output <boolean>', '是否输出图片资源的base64变量', false)
+  .option('--split-by-folder <boolean>', '是否按文件夹拆分变量文件', false)  // 添加新参数
   .action((options) => {
     const directory = path.resolve(options.directory);
     
