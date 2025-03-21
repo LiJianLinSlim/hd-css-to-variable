@@ -32,3 +32,6 @@ yarn-error.log*
 # Operating System
 .DS_Store
 Thumbs.db
+
+# demo
+src/demo

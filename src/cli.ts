@@ -64,7 +64,7 @@ program
   .description('使用自定义参数执行变量提取')
   .requiredOption('-d, --directory <path>', '要扫描的目录路径')
   .requiredOption('-p, --properties <items>', '要提取的CSS属性列表，用逗号分隔')
-  .option('--prefix <string>', '变量名前缀', 'var')
+  .option('--prefix <string>', '变量名前缀', '')
   .option('--output <filename>', '输出的变量文件名', 'variables.css')
   .option('--pattern <pattern>', '文件匹配模式', '**/*.{css,scss}')
   .option('--assets-output <boolean>', '是否输出图片资源的base64变量', false)
@@ -84,7 +84,8 @@ program
       prefix: options.prefix,
       outputFile: options.output,
       pattern: options.pattern,
-      assetsOutput: options.assetsOutput === 'true'  // 将字符串转换为布尔值传递给参数
+      assetsOutput: options.assetsOutput === 'true',  // 将字符串转换为布尔值传递给参数
+      splitByFolder: options.splitByFolder === 'true'  // 添加splitByFolder参数
     });
 
     cssToVariable.extract()

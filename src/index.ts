@@ -84,7 +84,8 @@ export class CssToVariable {
         const relativePath = path.relative(this.options.directory, filePath);
         const pathParts = relativePath.split(path.sep);
         if (pathParts.length > 1) {
-          folderName = pathParts[pathParts.length - 2];
+          // 将文件夹名中的空格替换为连字符
+          folderName = pathParts[pathParts.length - 2].replace(/\s+/g, '-');
         }
       }
 
@@ -264,12 +265,22 @@ export class CssToVariable {
    * 生成变量定义文件
    */
   private async generateVariablesFile(): Promise<void> {
+    // 如果没有提取到任何变量，则输出提示信息并返回
+    if (this.extractedVariables.length === 0) {
+      console.log('⚠️ 警告：未提取到任何CSS变量，跳过文件生成。');
+      return;
+    }
+
+    // 用于收集所有生成的变量文件路径
+    const generatedFiles: string[] = [];
+
     // 按文件夹分组变量
     const variablesByFolder = new Map<string, ExtractedVariable[]>();
     for (const variable of this.extractedVariables) {
       const filePath = variable.filePath;
       const relativePath = path.relative(this.options.directory, filePath);
-      const folderPath = path.dirname(relativePath);
+      // 将文件夹路径中的空格替换为连字符
+      const folderPath = path.dirname(relativePath).replace(/\s+/g, '-');
       
       if (!variablesByFolder.has(folderPath)) {
         variablesByFolder.set(folderPath, []);
@@ -277,27 +288,59 @@ export class CssToVariable {
       variablesByFolder.get(folderPath)!.push(variable);
     }
 
-    // 如果没有提取到任何变量，则输出提示信息并返回
-    if (this.extractedVariables.length === 0) {
-      console.log('⚠️ 警告：未提取到任何CSS变量，跳过文件生成。');
-      return;
-    }
+    if (this.options.splitByFolder) {
+      // 按文件夹分别生成变量文件
+      for (const [folder, variables] of variablesByFolder) {
+        let variablesContent = ':root {\n';
+        variablesContent += `\n  /* ${folder === '.' ? '根目录' : folder} */\n`;
 
-    // 生成CSS变量定义内容
-    let variablesContent = ':root {\n';
+        // 去重并生成变量定义
+        const uniqueVariables = new Map<string, string>();
+        for (const variable of variables) {
+          uniqueVariables.set(variable.variableName, variable.value);
+        }
 
-    // 按文件夹生成分组注释和变量
-    for (const [folder, variables] of variablesByFolder) {
-      // 添加文件夹注释
-      variablesContent += `\n  /* ${folder === '.' ? '根目录' : folder} */\n`;
+        // 添加变量定义
+        variablesContent += Array.from(uniqueVariables.entries())
+          .map(([name, value]) => `  ${name}: ${value};`)
+          .join('\n') + '\n';
 
-      // 去重并生成变量定义
-      const uniqueVariables = new Map<string, string>();
-      for (const variable of variables) {
-        uniqueVariables.set(variable.variableName, variable.value);
+        variablesContent += '}\n';
+
+        // 生成文件名
+        const folderName = folder === '.' ? 'root' : folder.replace(/[\\/]/g, '-');
+        const outputFileName = this.options.outputFile.replace(/\.css$/, `-${folderName}.css`);
+        const variablesDir = path.join(this.options.directory, 'variables');
+        
+        // 确保variables目录存在
+        if (!fs.existsSync(variablesDir)) {
+          fs.mkdirSync(variablesDir, { recursive: true });
+        }
+        
+        const outputFilePath = path.join(variablesDir, outputFileName);
+
+        // 写入文件
+        await fs.promises.writeFile(outputFilePath, variablesContent);
+        console.log(`✨ 生成变量文件: ${outputFileName}`);
+        generatedFiles.push(outputFileName);
       }
+    } else {
+      // 生成单个变量文件
+      let variablesContent = ':root {\n';
 
-      // 添加变量定义
+      // 按文件夹生成分组注释和变量
+      for (const [folder, variables] of variablesByFolder) {
+        // 添加文件夹注释，将文件夹路径中的空格替换为连字符
+        const normalizedFolder = folder === '.' ? '根目录' : folder.replace(/\s+/g, '-');
+        variablesContent += `\n  /* ${normalizedFolder} */\n`;
+
+        // 去重并生成变量定义
+        const uniqueVariables = new Map<string, string>();
+        for (const variable of variables) {
+          uniqueVariables.set(variable.variableName, variable.value);
+        }
+
+        // 添加变量定义
       variablesContent += Array.from(uniqueVariables.entries())
         .map(([name, value]) => `  ${name}: ${value};`)
         .join('\n') + '\n';
@@ -319,6 +362,8 @@ export class CssToVariable {
 
     // 写入文件
     await fs.promises.writeFile(outputFilePath, variablesContent);
+    console.log(`✨ 生成变量文件: ${path.basename(outputFilePath)}`);
+    generatedFiles.push(path.basename(outputFilePath));
 
     // 如果文件名与原始文件名不同，输出提示信息
     if (outputFilePath !== path.join(this.options.directory, this.options.outputFile)) {
@@ -332,7 +377,28 @@ export class CssToVariable {
       await fs.promises.writeFile(mapFilePath, mapContent);
     }
   }
-
+     // 生成index.css文件用于全量引入
+    if (generatedFiles.length > 0) {
+      const indexContent = generatedFiles
+        .map(file => `@import url("${file}");`)
+        .join('\n');
+      
+      let indexFilePath;
+      if (this.options.splitByFolder) {
+        // 确保variables目录存在
+        const variablesDir = path.join(this.options.directory, 'variables');
+        if (!fs.existsSync(variablesDir)) {
+          fs.mkdirSync(variablesDir, { recursive: true });
+        }
+        indexFilePath = path.join(variablesDir, 'index.css');
+      } else {
+        indexFilePath = path.join(this.options.directory, 'index.css');
+      }
+      
+      await fs.promises.writeFile(indexFilePath, indexContent);
+      console.log(`✨ 生成全量引入文件: ${path.relative(this.options.directory, indexFilePath)}`);
+    }
+  }
   /**
    * 生成资源变量文件
    */

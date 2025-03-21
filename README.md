@@ -25,7 +25,7 @@
 npm install hd-css-to-variable
 
 # 使用pnpm安装
-pnpm add hd-css-to-variable
+pnpm i hd-css-to-variable
 
 # 使用yarn安装
 yarn add hd-css-to-variable
