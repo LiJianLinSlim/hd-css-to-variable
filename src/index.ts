@@ -167,6 +167,7 @@ export class CssToVariable {
 
     // 首先处理SCSS变量定义
     if (path.extname(filePath) === '.scss') {
+      
       root.walkDecls((decl) => {
         if (decl.prop.startsWith('$')) {
           const variableName = this.generateVariableName('color', decl.value);
@@ -190,9 +191,9 @@ export class CssToVariable {
 
     for (const decl of declarations) {
       if (this.options.properties.includes(decl.prop) && !decl.value.startsWith('var(') && !decl.value.startsWith('--')) {
-        // 检查属性值是否包含SCSS变量（$符号）
-        if (decl.value.includes('$')) {
-          continue;  // 改用 continue 而不是 return，确保继续处理其他声明
+        // 检查属性值是否包含SCSS变量（$符号）或@include指令
+        if (decl.value.includes('$') || decl.parent?.type === 'atrule' && (decl.parent as postcss.AtRule).name === 'include') {
+          continue;  // 跳过SCSS变量和@include指令
         }
 
         // 处理所有图片路径，包括相对路径和url()函数
@@ -231,7 +232,7 @@ export class CssToVariable {
 
         // 如果属性值为transparent，跳过处理
         if (decl.value.toLowerCase() === 'transparent') {
-          return;
+          continue;
         }
         const variableName = this.options.nameFormatter(decl.prop, decl.value, decl);
         const variable = {
@@ -252,11 +253,13 @@ export class CssToVariable {
       console.log(`✨ 从文件中提取了 ${variablesCount} 个变量`);  // 显示提取的变量数量
     }
 
-    const processedResult = await processor.process(root, {
+    // 使用原始的PostCSS实例处理更新后的根节点
+    const processedResult = await postcss().process(root.toString(), {
       from: filePath,
       syntax: path.extname(filePath) === '.scss' ? scss : undefined
     });
 
+    // 写入更新后的文件内容
     await fs.promises.writeFile(filePath, processedResult.css);
     console.log(`✅ 文件更新完成: ${path.relative(this.options.directory, filePath)}`);  // 添加文件更新完成提示
   }
@@ -378,22 +381,17 @@ export class CssToVariable {
     }
   }
      // 生成index.css文件用于全量引入
-    if (generatedFiles.length > 0) {
+    if (this.options.splitByFolder && generatedFiles.length >= 2) {
       const indexContent = generatedFiles
         .map(file => `@import url("${file}");`)
         .join('\n');
       
-      let indexFilePath;
-      if (this.options.splitByFolder) {
-        // 确保variables目录存在
-        const variablesDir = path.join(this.options.directory, 'variables');
-        if (!fs.existsSync(variablesDir)) {
-          fs.mkdirSync(variablesDir, { recursive: true });
-        }
-        indexFilePath = path.join(variablesDir, 'index.css');
-      } else {
-        indexFilePath = path.join(this.options.directory, 'index.css');
+      // 确保variables目录存在
+      const variablesDir = path.join(this.options.directory, 'variables');
+      if (!fs.existsSync(variablesDir)) {
+        fs.mkdirSync(variablesDir, { recursive: true });
       }
+      const indexFilePath = path.join(variablesDir, 'index.css');
       
       await fs.promises.writeFile(indexFilePath, indexContent);
       console.log(`✨ 生成全量引入文件: ${path.relative(this.options.directory, indexFilePath)}`);
